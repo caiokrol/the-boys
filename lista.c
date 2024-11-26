@@ -4,225 +4,217 @@
 
 
 // Cria uma lista vazia.
-struct lista_t *lista_cria() {
-    struct lista_t *lst = (struct lista_t *)malloc(sizeof(struct lista_t));
-    if (lst == NULL) {
-        return NULL;  // Erro ao alocar memória
-    }
-    lst->prim = lst->ult = NULL;
-    lst->tamanho = 0;
-    return lst;
-}
+#include <stdio.h>
+#include <stdlib.h>
+#include "lista.h"
 
-// Remove todos os itens da lista e libera a memória.
+struct lista_t *lista_cria (){
+    struct lista_t *lista;
+    if(!(lista = malloc(sizeof(struct lista_t)))) {
+        return NULL;
+    };
+    lista->prim = NULL;
+    lista->ult = NULL;
+    lista->tamanho = 0;
+    return lista;
+};
+
 struct lista_t *lista_destroi(struct lista_t *lst) {
+    // Verifica a lista é nula
     if (lst == NULL) {
         return NULL;
     }
-    struct item_t *atual = lst->prim;
-    while (atual != NULL) {
-        struct item_t *prox = atual->prox;
-        free(atual);
-        atual = prox;
+
+    struct item_t *aux;
+
+    while (lst->prim != NULL) {
+        aux = lst->prim;
+        
+        // Atualiza o ponteiro prim para o próximo
+        lst->prim = lst->prim->prox;
+
+        // Libera o atual
+        free(aux);
     }
+
+    //libera a struct lista
     free(lst);
+    
+    //indica que a lista foi destruída
     return NULL;
 }
 
-// Insere o item na lista na posição indicada.
 int lista_insere(struct lista_t *lst, int item, int pos) {
-    if (lst == NULL) {
+    struct item_t *novo;
+
+    if(lst == NULL) {
         return -1;
     }
 
-    // Criação do novo item
-    struct item_t *novo_item = (struct item_t *)malloc(sizeof(struct item_t));
-    if (novo_item == NULL) {
-        return -1;  // Erro ao alocar memória
+    // Tenta alocar memoria para um novo item
+    if (!(novo = malloc(sizeof(struct item_t)))) {
+        return -1;
     }
-    novo_item->valor = item;
-    novo_item->ant = novo_item->prox = NULL;
 
-    // Caso especial: lista vazia
-    if (lst->tamanho == 0) {
-        lst->prim = lst->ult = novo_item;
-    } else if (pos <= 0 || pos >= lst->tamanho) { // Inserir no final
-        novo_item->ant = lst->ult;
-        lst->ult->prox = novo_item;
-        lst->ult = novo_item;
-    } else { // Inserção no meio da lista
+    novo->valor = item;
+    novo->ant = NULL;
+    novo->prox = NULL;
+
+    // Se a lista está vazia
+    if (lst->prim == NULL) {
+        lst->prim = novo;
+        lst->ult = novo;
+    }
+    else if (pos == 0) { 
+        // Insere no início se pos é 0
+        novo->prox = lst->prim;
+        lst->prim->ant = novo;
+        lst->prim = novo;
+    }
+    else if (pos >= lst->tamanho || pos == -1) {
+        // Insere no final se pos é -1 ou maior que o último índice
+        novo->ant = lst->ult;
+        lst->ult->prox = novo;
+        lst->ult = novo;
+    }
+    else {
+        // Insere em uma posição especifica
         struct item_t *atual = lst->prim;
-        for (int i = 0; i < pos; i++) {
+        for (int i = 0; i < pos - 1; i++) {
             atual = atual->prox;
         }
-        novo_item->prox = atual;
-        novo_item->ant = atual->ant;
-        if (atual->ant != NULL) {
-            atual->ant->prox = novo_item;
-        } else {
-            lst->prim = novo_item;
+        novo->prox = atual->prox;
+        novo->ant = atual;
+        if (atual->prox) {
+            atual->prox->ant = novo;
         }
-        atual->ant = novo_item;
+        atual->prox = novo;
     }
+
     lst->tamanho++;
     return lst->tamanho;
-}
+};
 
-// Retira o item da lista da posição indicada.
 int lista_retira(struct lista_t *lst, int *item, int pos) {
-    if (lst == NULL || lst->tamanho == 0 || item == NULL) {
+    // Verifica se a lista está vazia
+    if (lst== NULL || item == NULL|| pos >= lst->tamanho) {
         return -1;
-    }
-
-    struct item_t *remover;
-    if (pos <= 0) {  // Remover do início
-        remover = lst->prim;
-        lst->prim = remover->prox;
-        if (lst->prim != NULL) {
-            lst->prim->ant = NULL;
-        } else {
-            lst->ult = NULL;  // A lista ficou vazia
-        }
-    } else if (pos >= lst->tamanho - 1 || pos == -1) {  // Remover do fim
-        remover = lst->ult;
-        lst->ult = remover->ant;
-        if (lst->ult != NULL) {
-            lst->ult->prox = NULL;
-        } else {
-            lst->prim = NULL;  // A lista ficou vazia
-        }
-    } else {  // Remover do meio
-        remover = lst->prim;
-        for (int i = 0; i < pos; i++) {
-            remover = remover->prox;
-        }
-        remover->ant->prox = remover->prox;
-        remover->prox->ant = remover->ant;
-    }
-
-    *item = remover->valor;
-    free(remover);
-    lst->tamanho--;
-    return lst->tamanho;
-}
-
-// Informa o valor do item na posição indicada, sem retirá-lo.
-int lista_consulta(struct lista_t *lst, int *item, int pos) {
-    if (lst == NULL || item == NULL || lst->tamanho == 0) {
-        return -1;  // Erro: lista nula, item nulo ou lista vazia
     }
 
     struct item_t *atual;
 
-    // Consulta do fim
-    if (pos == -1 || pos >= lst->tamanho - 1) {
-        atual = lst->ult;
-    } else {  // Consulta em uma posição específica
+    lst->tamanho--;
+    
+    // Remover do início da lista
+    if (pos == 0) {
         atual = lst->prim;
-        for (int i = 0; i < pos; i++) {
-            atual = atual->prox;
+        *item = atual->valor;
+        lst->prim = atual->prox;
+        if (lst->prim) {
+            lst->prim->ant = NULL;
+        } else {
+            lst->ult = NULL;  // Lista fica vazia
         }
+        free(atual);
+        return lst->tamanho;
     }
 
+    // Remover do final da lista
+    if (pos == -1) {
+        atual = lst->ult;
+        *item = atual->valor;
+        lst->ult = atual->ant;
+        if (lst->ult) {
+            lst->ult->prox = NULL;
+        } else {
+            lst->prim = NULL;  // Lista fica vazia
+        }
+        free(atual);
+        return lst->tamanho;
+    }
+
+    // Remover de uma posição específica
+    atual = lst->prim;
+    for (int i = 0; i < pos; i++) {
+        atual = atual->prox;
+    }
     *item = atual->valor;
+    atual->ant->prox = atual->prox;
+    if (atual->prox) {
+        atual->prox->ant = atual->ant;
+    }
+    free(atual);
     return lst->tamanho;
 }
 
-// Informa a posição da 1ª ocorrência do valor indicado na lista.
+int lista_consulta(struct lista_t *lst, int *item, int pos) {
+    if (lst == NULL || item == NULL) {
+        return -1;
+    };
+    struct item_t *a;
+    if (pos == 0) {
+        a = lst->prim;
+    }
+    else if (pos == -1) {
+        a = lst->ult;
+    }
+    else if (pos >= lst->tamanho) { //Fiz diferente do que pede nos comentarios da funcao porque os testes davam errado quando executavam 
+        return -1;
+    }
+    else {
+        a = lst->prim;
+        for (int i = 0; i < pos; i++) {
+            a = a->prox;
+        }
+    }
+    *item = a->valor;
+    return lst->tamanho;
+}
+
 int lista_procura(struct lista_t *lst, int valor) {
-    if (lst == NULL || lst->tamanho == 0) {
-        return -1;  // Erro: lista nula ou vazia
+    if (lst == NULL) {
+        return -1;
     }
 
     struct item_t *atual = lst->prim;
     int pos = 0;
 
+    // Percorre a lista em busca do valor
     while (atual != NULL) {
         if (atual->valor == valor) {
-            return pos;  // Encontrou a primeira ocorrência
+            return pos; 
         }
         atual = atual->prox;
         pos++;
     }
 
-    return -1;  // Valor não encontrado
+    // Retorna -1 se o valor não for encontrado
+    return -1;
 }
 
-// Informa o tamanho da lista (número de itens presentes nela).
 int lista_tamanho(struct lista_t *lst) {
     if (lst == NULL) {
-        return -1;  // Erro: lista nula
+        return -1;
     }
+    
     return lst->tamanho;
 }
 
-// Imprime o conteúdo da lista do início ao fim.
-void lista_imprime(struct lista_t *lst) {    
-    if (lst == NULL || lst->tamanho == 0) {
-        return;  // Lista nula ou vazia, não imprime nada
+void lista_imprime(struct lista_t *lst) {
+    // Verifica se a lista está vazia
+    if (lst == NULL || lst->prim == NULL) {
+        return;
     }
 
     struct item_t *atual = lst->prim;
+
+    // Imprime o primeiro item
+    printf("%d", atual->valor);
+    atual = atual->prox;
+
+    // Imprime o resto
     while (atual != NULL) {
-        printf("%d", atual->valor);
-        if (atual->prox != NULL) {
-            printf(" ");
-        }
+        printf(" %d", atual->valor);
         atual = atual->prox;
     }
-}
-
-int main() {
-    // Criação da lista
-    struct lista_t *lst = lista_cria();
-    if (lst == NULL) {
-        printf("Erro ao criar a lista.\n");
-        return 1;
-    }
-
-    // Inserção de elementos
-    printf("Inserindo elementos na lista...\n");
-    lista_insere(lst, 10, 0);  // Inserir no início
-    lista_insere(lst, 20, -1); // Inserir no final
-    lista_insere(lst, 30, 1);  // Inserir na posição 1
-    lista_insere(lst, 40, 3);  // Inserir no final
-    lista_imprime(lst);
-    printf("\nTamanho da lista: %d\n", lista_tamanho(lst));
-
-    // Consulta de elementos
-    int valor;
-    lista_consulta(lst, &valor, 0);  // Consulta o primeiro elemento
-    printf("Elemento na posição 0: %d\n", valor);
-    lista_consulta(lst, &valor, -1); // Consulta o último elemento
-    printf("Elemento na última posição: %d\n", valor);
-
-    // Procura por um elemento
-    int pos = lista_procura(lst, 20);
-    if (pos != -1) {
-        printf("O valor 20 está na posição: %d\n", pos);
-    } else {
-        printf("O valor 20 não foi encontrado.\n");
-    }
-
-    // Remoção de elementos
-    printf("Removendo elemento na posição 1...\n");
-    lista_retira(lst, &valor, 1);
-    printf("Elemento removido: %d\n", valor);
-    lista_imprime(lst);
-    printf("\nTamanho da lista após remoção: %d\n", lista_tamanho(lst));
-
-    // Remoção do fim
-    printf("Removendo o último elemento...\n");
-    lista_retira(lst, &valor, -1);
-    printf("Elemento removido: %d\n", valor);
-    lista_imprime(lst);
-    printf("\nTamanho da lista após remoção: %d\n", lista_tamanho(lst));
-
-    // Destruir a lista
-    lst = lista_destroi(lst);
-    if (lst == NULL) {
-        printf("Lista destruída com sucesso.\n");
-    }
-
-    return 0;
 }
