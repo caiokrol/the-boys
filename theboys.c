@@ -79,7 +79,7 @@ struct s_heroi inicializa_heroi(int id){
     return;
   }
   for (int i = 0; i <= aleat(1, 3); i++){
-    if (!(cjto_insere(novo_heroi.habilidades, aleat(1, N_HABILIDADES)))){
+    if (!(cjto_insere(novo_heroi.habilidades, aleat(0, N_HABILIDADES - 1)))){
       printf("Falha ao inserir habilidade!\n");
       return;
     }
@@ -87,7 +87,73 @@ struct s_heroi inicializa_heroi(int id){
     return novo_heroi;
 }
 
+int inicializar_herois (){
+  int ids_heroi = 0;
+  struct s_heroi herois[N_HEROIS];
+  for (int i = 0; i < N_HEROIS; i++){
+    herois[i] = inicializa_heroi(ids_heroi);
+    ids_heroi++;
+  }
+  return 1;
+}
 
+struct s_base inicializa_base(int id){
+  struct s_base nova_base;
+  nova_base.id = id;
+  nova_base.lotacao = aleat(3, 10);
+  nova_base.local.x = aleat(0, N_TAMANHO_MUNDO - 1);
+  nova_base.local.y = aleat(0, N_TAMANHO_MUNDO - 1);
+
+  if(!(nova_base.presentes = cjto_cria(nova_base.lotacao))){
+    printf("Erro ao criar conjunto de presentes da base");
+    return;
+  }
+  if(!(nova_base.espera = lista_cria())){
+    printf("Erro ao criar lista de espera da base");
+    return;
+  };
+  return nova_base;
+}
+
+int inicializar_bases () {
+  int ids_base = 0;
+  struct s_base bases[N_BASES];
+  for (int i = 0; i < N_BASES; i++){
+    bases[i] = inicializa_base(ids_base);
+    ids_base++;
+  };
+  return 1;
+}
+
+struct s_missao inicializar_missao (int id){
+  struct s_missao nova_missao;
+  nova_missao.id = id;
+  nova_missao.local.x = aleat(0, N_TAMANHO_MUNDO - 1);
+  nova_missao.local.y = aleat(0, N_TAMANHO_MUNDO - 1);
+
+  int num_Hab = aleat(6, 10);
+  if(!(nova_missao.habilidades = cjto_cria(num_Hab))){
+    printf("Erro ao criar conjunto de presentes da base");
+    return;
+  }
+  for (int i = 0; i < num_Hab; i++){
+    cjto_insere(&nova_missao.habilidades, aleat(1, 10));
+  }
+
+  nova_missao.n_perigo = aleat(0, 100);
+
+  return nova_missao;
+}
+
+int inicializar_missoes(){
+  int ids_missoes = 0;
+  struct s_missao missoes[N_MISSOES];
+  for (int i = 0; i < N_MISSOES; i++){
+    missoes[i] = inicializar_missao(ids_missoes);
+    ids_missoes++;
+  }
+ return 1;
+}
 // programa principal
 int main ()
 {
