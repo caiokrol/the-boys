@@ -92,6 +92,7 @@ struct s_evento {
     int heroi_id;     // Identificador do herói
     int base_id;      // Identificador da base (se necessário)
     int tipo_evento;  // Tipo do evento (CHEGA, SAI, etc.)
+    int missao_id;
     // Adicione outros campos conforme necessário para o evento
 };
 
@@ -266,6 +267,49 @@ int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef)
     return E_MISSAO;
 }
 
+int fim(struct s_mundo *mundo) {
+    // 1. Exibe as estatísticas dos heróis
+    printf("Estatísticas dos Heróis:\n");
+    for (int i = 0; i < N_HEROIS; i++) {
+        struct s_heroi *heroi = &mundo->herois[i];
+        printf("Herói %d: \n", heroi->id);
+        printf("  - Experiência: %d\n", heroi->experiencia);
+        printf("  - Paciência: %d\n", heroi->paciencia);
+        printf("  - Status: %s\n", heroi->status == MORTO ? "Morto" : "Vivo");
+    }
+
+    // 2. Exibe as estatísticas das bases
+    printf("\nEstatísticas das Bases:\n");
+    for (int i = 0; i < N_BASES; i++) {
+        struct s_base *base = &mundo->bases[i];
+        printf("Base %d: \n", base->id);
+        printf("  - Lotação: %d\n", base->lotacao);
+        printf("  - Número de heróis presentes: %d\n", lista_tamanho(base->presentes));
+        printf("  - Número de heróis na fila de espera: %d\n", lista_tamanho(base->espera));
+    }
+
+    // 3. Exibe as estatísticas das missões
+    printf("\nEstatísticas das Missões:\n");
+    for (int i = 0; i < N_MISSOES; i++) {
+        struct s_missao *missao = &mundo->missoes[i];
+        printf("Missão %d: \n", missao->id);
+        printf("  - Local: (%d, %d)\n", missao->local.x, missao->local.y);
+        printf("  - Requer habilidades: ");
+        cjto_imprime(missao->habilidades);
+        printf("\n");
+        printf("  - Status: %s\n", missao->status ? "Completa" : "Impossível");
+    }
+
+    // 4. Libera recursos alocados (se necessário)
+    free(mundo);
+
+    // 5. Encerra a simulação
+    printf("\nSimulação encerrada.\n");
+
+    // 6. Retorna um código indicando que a simulação foi finalizada
+    return -1;  // -1 pode ser um código que indica que a simulação foi encerrada
+}
+
 // Retorna um número inteiro aleatório entre min e max
 int aleat(int min, int max) {
   return (rand() % (max - min + 1)) + min;
@@ -315,12 +359,17 @@ int inicializa_heroi(struct s_heroi *heroi, int *id) {
   return 1;
 }
 
-int inicializar_herois(struct s_mundo *mundo, int *id) {
+int inicializar_herois(struct s_mundo *mundo, int *id, struct fprio_t *lef) {
 
   for (int i = 0; i < N_HEROIS; i++) {
     if (inicializa_heroi(&(mundo->herois[i]), id) == -1) {
       return -1;
     }
+    int base_aleatoria = aleat(0, N_BASES);       // Base aleatória entre 0 e (N_BASES - 1)
+    int tempo = aleat(0, 4320);       // Tempo aleatório entre 0 e 4320 minutos
+
+        // Cria e insere o evento CHEGA na LEF
+        CRIAR_EVENTO(mundo, lef, E_CHEGA, tempo, i, base_aleatoria);
     (*id)++;
   }
   return 1;
@@ -360,6 +409,7 @@ int inicializa_missao(struct s_missao *missao, int *id) {
   missao->id = *id;
   missao->local.x = aleat(0, N_TAMANHO_MUNDO - 1);
   missao->local.y = aleat(0, N_TAMANHO_MUNDO - 1);
+  missao->status = EMABERTO;
 
   int num_Hab = aleat(6, 10);
   if (!(missao->habilidades = cjto_cria(num_Hab))) {
@@ -389,7 +439,48 @@ int inicializar_missoes(struct s_mundo *mundo, int *id) {
   return 1;
 }
 
+void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
+    int tempo_atual = 0;  // Inicia o tempo da simulação
 
+    while (!fprio_vazia(lef)) {
+        struct s_evento *evento_atual = fprio_remove(lef);
+        tempo_atual = evento_atual->tempo;  // Atualiza o tempo atual
+
+        // Processa o evento com base no tipo
+        switch (evento_atual->tipo_evento) {
+            case E_CHEGA:
+                chega(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
+            case E_ESPERA:
+                espera(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
+            case E_DESISTE:
+                desiste(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
+            case E_AVISA:
+                avisa(mundo, evento_atual->tempo, evento_atual->base_id, lef);
+                break;
+            case E_MISSAO:
+                missao(mundo, evento_atual->tempo, evento_atual->missao_id, lef); // Adapte se missao_id existir
+                break;
+            case E_MORRE:
+                morre(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
+            case E_VIAJA:
+                viaja(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
+            case E_FIM:
+                fim(mundo);  // Encerra a simulação e apresenta estatísticas
+                return;
+            default:
+                printf("Evento desconhecido: %d\n", evento_atual->tipo_evento);
+        }
+
+        // Libera a memória do evento processado
+        free(evento_atual);
+    }
+
+}
 
 // programa principal
 int main ()
@@ -399,7 +490,11 @@ int *ultimo_id_bases = 0;
 int *ultimo_id_missoes = 0;
 
 struct s_mundo *mundo = inicializa_mundo();
-inicializar_herois(mundo, ultimo_id_herois);
+struct fprio_t *lef = fprio_cria();
+
+srand(time(NULL));
+
+inicializar_herois(mundo, ultimo_id_herois, lef);
 inicializar_bases(mundo, *ultimo_id_bases);
 inicializar_missoes(mundo, ultimo_id_missoes);
 
@@ -408,9 +503,12 @@ for (int i = 0; i < N_HEROIS; i++){
 }
 
 struct fprio_t *lef = fprio_cria();
-  // executar o laço de simulação
+
+// executar o laço de simulação
+executar_simulacao(mundo, lef);
 
   // destruir o mundo
+fim(mundo);
 
   return (0) ;
 }
