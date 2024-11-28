@@ -3,6 +3,8 @@
 
 // seus #includes vão aqui
 #include <stdio.h>
+#include <math.h>>
+#include <stdlib.h>
 #include "conjunto.h"
 #include "fprio.h"
 #include "lista.h"
@@ -14,6 +16,12 @@
 #define N_HEROIS (N_HABILIDADES * 5)
 #define N_BASES (N_HEROIS / 5)
 #define N_MISSOES (T_FIM_DO_MUNDO / 100)
+
+#define MORTO 0
+#define VIVO 1
+
+#define EMABERTO 0
+#define CUMPRIDA 1
 
 #define E_CHEGA    1
 #define E_ESPERA   2
@@ -48,6 +56,7 @@ struct s_heroi {
   int velocidade;
   int experiencia;
   int base;
+  int status;
 };
 
 struct s_base {
@@ -63,6 +72,7 @@ struct s_missao {
   struct cjto_t *habilidades;
   int n_perigo;
   struct s_coord local;
+  int status;
 };
 
 struct s_mundo {
@@ -131,7 +141,7 @@ int espera(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t
 
 int desiste(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
     // Escolhe uma base destino aleatória
-    int nova_base = rand(0, N_BASES);  // Considerando que mundo->num_bases é o número total de bases
+    int nova_base = aleat(0, N_BASES);  // Considerando que mundo->num_bases é o número total de bases
 
     // Cria e insere o evento VIAJA na LEF
     CRIAR_EVENTO(mundo, lef, E_VIAJA, tempo, heroi, nova_base);
@@ -155,11 +165,115 @@ int avisa(struct s_mundo *mundo, int tempo, int base, struct fprio_t *lef) {
     return E_ENTRA;
 }
 
+int entra(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
+    struct s_heroi *h = &mundo->herois[heroi];
+    int TPB;
+    TPB = (15 + h->paciencia) * aleat(1, 20);
+
+    CRIAR_EVENTO(mundo, lef, E_SAI, tempo + TPB, heroi, base);
+}
+
+int sai(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
+    struct s_base *b = &mundo->bases[base];
+    struct s_heroi *h = &mundo->herois[heroi];
+
+    // Remove o herói do conjunto de presentes na base
+    cjto_remove(b->presentes, heroi);
+
+    // Escolhe uma base destino aleatória diferente da base atual
+    int destino;
+    do {
+        destino = rand() % mundo->NBases;  // Assume que o número total de bases é num_bases
+    } while (destino == base);  // Garante que a base destino é diferente da atual
+
+    // Cria e insere o evento VIAJA na LEF
+    CRIAR_EVENTO(mundo, lef, E_VIAJA, tempo, heroi, destino);
+
+    // Cria e insere o evento AVISA para notificar o porteiro sobre a vaga liberada
+    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, -1, base);
+
+    return E_VIAJA;
+}
+
+int viaja(struct s_mundo *mundo, int tempo, int heroi, int destino, struct fprio_t *lef) {
+    struct s_heroi *h = &mundo->herois[heroi];
+    struct s_base *b_atual = &mundo->bases[h->base];
+    struct s_base *b_destino = &mundo->bases[destino];
+
+    // Calcula a distância entre a base atual e a base de destino usando a posição (x, y)
+    float distancia = calcula_distancia(b_atual->local.x, b_atual->local.y, b_destino->local.x, b_destino->local.y);
+    
+    // Calcula a duração da viagem com base na velocidade do herói
+    int duracao = distancia / h->velocidade;  // Assume que 'velocidade' está na struct s_heroi
+
+    // Cria e insere o evento CHEGA na LEF
+    CRIAR_EVENTO(mundo, lef, E_CHEGA, tempo + duracao, heroi, destino);
+
+    return E_CHEGA;
+}
+
+int morre(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
+    struct s_base *b = &mundo->bases[base];
+    struct s_heroi *h = &mundo->herois[heroi];
+
+    // Remove o herói do conjunto de presentes na base
+    cjto_remove(b->presentes, heroi);
+
+    // Marca o herói como morto
+    h->status = MORTO;  // Assume que existe um campo 'status' e uma constante MORTO
+
+    // Cria e insere o evento AVISA na LEF para notificar o porteiro
+    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, -1, base);
+
+    return E_AVISA;
+}
+
+int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef) {
+    struct s_missao *m = &mundo->missoes[missao_id];
+    struct s_base *bmp = NULL;
+    float menor_distancia = INFINITY;
+
+    // Calcula a distância de cada base até o local da missão e verifica se está apta
+    for (int i = 0; i < mundo->NBases; i++) {
+        struct s_base *b = &mundo->bases[i];
+        if (base_esta_apta(b, m)) { // Supondo função base_esta_apta() já implementada
+            float distancia = calcula_distancia(b->local.x, b->local.y, m->local.x, m->local.y);
+            if (distancia < menor_distancia) {
+                menor_distancia = distancia;
+                bmp = b;
+            }
+        }
+    }
+
+    // Se há uma base apta (BMP)
+    if (bmp) {
+        m->status = CUMPRIDA;
+        for (int i = 0; i < cjto_card(bmp->presentes); i++) {
+            struct s_heroi *h = cjto_obtem_heroi(bmp->presentes, i);  // Supondo função que retorna o herói na base
+            float risco = m->n_perigo / (h->paciencia + h->experiencia + 1.0);
+            if (risco > aleatorio(0, 30)) {  // Supondo função aleatorio()
+                CRIAR_EVENTO(mundo, lef, E_MORRE, tempo, h->id, bmp->id);
+                return E_MORRE;
+            } else {
+                h->experiencia++;
+            }
+        }
+        return E_MISSAO;
+    }
+
+    // Caso não haja uma base apta, adia a missão
+    CRIAR_EVENTO(mundo, lef, E_MISSAO, tempo + (24 * 60), missao_id, -1); // Adia para o dia seguinte
+    return E_MISSAO;
+}
+
 // Retorna um número inteiro aleatório entre min e max
 int aleat(int min, int max) {
   return (rand() % (max - min + 1)) + min;
 }
 
+float calcula_distancia(int x1, int y1, int x2, int y2) {
+    return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
+}
 
 struct s_mundo* inicializa_mundo(){
   struct s_mundo *mundo;
@@ -183,7 +297,7 @@ int inicializa_heroi(struct s_heroi *heroi, int *id) {
   heroi->experiencia = 0;
   heroi->paciencia = aleat(0, 100);
   heroi->velocidade = aleat(50, 50000);
-
+  heroi->status = VIVO;
 
   heroi->habilidades = cjto_cria(N_HABILIDADES);
   if (!heroi->habilidades) {
