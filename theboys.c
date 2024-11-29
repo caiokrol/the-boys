@@ -3,8 +3,9 @@
 
 // seus #includes vão aqui
 #include <stdio.h>
-#include <math.h>>
+#include <math.h>
 #include <stdlib.h>
+#include <time.h>
 #include "conjunto.h"
 #include "fprio.h"
 #include "lista.h"
@@ -96,6 +97,15 @@ struct s_evento {
     // Adicione outros campos conforme necessário para o evento
 };
 
+// Retorna um número inteiro aleatório entre min e max
+int aleat(int min, int max) {
+  return (rand() % (max - min + 1)) + min;
+}
+
+float calcula_distancia(int x1, int y1, int x2, int y2) {
+    return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
+}
+
 struct s_evento *cria_evento(int tempo, int tipo, int heroi_id, int base_id){
     struct s_evento *novo;
     if (!(novo = malloc(sizeof(struct s_evento)))){
@@ -140,7 +150,8 @@ int espera(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t
     return E_AVISA;
 }
 
-int desiste(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
+int desiste(struct s_mundo *mundo, int tempo, int heroi, struct fprio_t *lef) {
+    (void)mundo; //Suprime o erro do compilador de que o parametro não está sendo utilizado
     // Escolhe uma base destino aleatória
     int nova_base = aleat(0, N_BASES);  // Considerando que mundo->num_bases é o número total de bases
 
@@ -155,10 +166,11 @@ int avisa(struct s_mundo *mundo, int tempo, int base, struct fprio_t *lef) {
     // Enquanto houver vaga na base e heróis esperando na fila
     while ((cjto_card(b->presentes) < b->lotacao) && (lista_tamanho(b->espera) > 0)) {
         // Retira o primeiro herói da fila de espera
-        int heroi_id = lista_remove_inicio(b->espera);  // Assume função para remover do início da lista
-        
+        int heroi_id;
+        lista_consulta(b->espera, &heroi_id, 0);  // Assume função para remover do início da lista
+        lista_retira(b->espera, &heroi_id, 0);
         // Adiciona o herói ao conjunto de heróis presentes na base
-        cjto_adiciona(b->presentes, heroi_id);
+        cjto_insere(b->presentes, heroi_id);
 
         // Cria e insere o evento ENTRA na LEF
         CRIAR_EVENTO(mundo, lef, E_ENTRA, tempo, heroi_id, base);
@@ -172,14 +184,15 @@ int entra(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
     TPB = (15 + h->paciencia) * aleat(1, 20);
 
     CRIAR_EVENTO(mundo, lef, E_SAI, tempo + TPB, heroi, base);
+
+    return E_ENTRA;
 }
 
 int sai(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
     struct s_base *b = &mundo->bases[base];
-    struct s_heroi *h = &mundo->herois[heroi];
 
     // Remove o herói do conjunto de presentes na base
-    cjto_remove(b->presentes, heroi);
+    cjto_retira(b->presentes, heroi);
 
     // Escolhe uma base destino aleatória diferente da base atual
     int destino;
@@ -218,7 +231,7 @@ int morre(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
     struct s_heroi *h = &mundo->herois[heroi];
 
     // Remove o herói do conjunto de presentes na base
-    cjto_remove(b->presentes, heroi);
+    cjto_retira(b->presentes, heroi);
 
     // Marca o herói como morto
     h->status = MORTO;  // Assume que existe um campo 'status' e uma constante MORTO
@@ -229,6 +242,28 @@ int morre(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
     return E_AVISA;
 }
 
+struct cjto_t *uniao_habilidades(struct s_mundo *mundo, struct s_base *b){
+  struct cjto_t *uniao = cjto_cria(N_HABILIDADES);
+  struct cjto_t *temp = NULL;
+
+  for(int i = 0; i < N_HEROIS; i++){
+    if(cjto_pertence(b->presentes, i)){
+    temp = mundo->herois[i].habilidades;
+    cjto_uniao(uniao, temp);
+    }
+  }
+
+  return uniao;
+}
+
+bool base_esta_apta(struct s_mundo *mundo, struct s_base *b, struct s_missao *m){
+  if(cjto_contem((uniao_habilidades(mundo, b)), m->habilidades)){
+    return true;
+  }
+
+  return false;
+}
+
 int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef) {
     struct s_missao *m = &mundo->missoes[missao_id];
     struct s_base *bmp = NULL;
@@ -237,7 +272,7 @@ int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef)
     // Calcula a distância de cada base até o local da missão e verifica se está apta
     for (int i = 0; i < mundo->NBases; i++) {
         struct s_base *b = &mundo->bases[i];
-        if (base_esta_apta(b, m)) { // Supondo função base_esta_apta() já implementada
+        if (base_esta_apta(mundo, b, m)) { // Supondo função base_esta_apta() já implementada
             float distancia = calcula_distancia(b->local.x, b->local.y, m->local.x, m->local.y);
             if (distancia < menor_distancia) {
                 menor_distancia = distancia;
@@ -250,9 +285,9 @@ int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef)
     if (bmp) {
         m->status = CUMPRIDA;
         for (int i = 0; i < cjto_card(bmp->presentes); i++) {
-            struct s_heroi *h = cjto_obtem_heroi(bmp->presentes, i);  // Supondo função que retorna o herói na base
+            struct s_heroi *h = &mundo->herois[i];
             float risco = m->n_perigo / (h->paciencia + h->experiencia + 1.0);
-            if (risco > aleatorio(0, 30)) {  // Supondo função aleatorio()
+            if (risco > aleat(0, 30)) { 
                 CRIAR_EVENTO(mundo, lef, E_MORRE, tempo, h->id, bmp->id);
                 return E_MORRE;
             } else {
@@ -284,7 +319,7 @@ int fim(struct s_mundo *mundo) {
         struct s_base *base = &mundo->bases[i];
         printf("Base %d: \n", base->id);
         printf("  - Lotação: %d\n", base->lotacao);
-        printf("  - Número de heróis presentes: %d\n", lista_tamanho(base->presentes));
+        printf("  - Número de heróis presentes: %d\n", cjto_card(base->presentes));
         printf("  - Número de heróis na fila de espera: %d\n", lista_tamanho(base->espera));
     }
 
@@ -310,15 +345,6 @@ int fim(struct s_mundo *mundo) {
     return -1;  // -1 pode ser um código que indica que a simulação foi encerrada
 }
 
-// Retorna um número inteiro aleatório entre min e max
-int aleat(int min, int max) {
-  return (rand() % (max - min + 1)) + min;
-}
-
-float calcula_distancia(int x1, int y1, int x2, int y2) {
-    return sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2));
-}
-
 struct s_mundo* inicializa_mundo(){
   struct s_mundo *mundo;
 
@@ -337,6 +363,12 @@ struct s_mundo* inicializa_mundo(){
 };
 
 int inicializa_heroi(struct s_heroi *heroi, int *id) {
+
+  if (heroi == NULL) {  // Verificação de ponteiro inválido
+    printf("Erro: ponteiro heroi inválido!\n");
+    return -1;
+  }
+
   heroi->id = *id;
   heroi->experiencia = 0;
   heroi->paciencia = aleat(0, 100);
@@ -410,21 +442,20 @@ int inicializa_missao(struct s_missao *missao, int *id) {
   missao->local.x = aleat(0, N_TAMANHO_MUNDO - 1);
   missao->local.y = aleat(0, N_TAMANHO_MUNDO - 1);
   missao->status = EMABERTO;
-
   int num_Hab = aleat(6, 10);
   if (!(missao->habilidades = cjto_cria(num_Hab))) {
     printf("Erro ao criar conjunto de habilidades da missão\n");
     return -1;
   }
-
-  for (int i = 0; i < num_Hab; i++) {
-    if (!cjto_insere(missao->habilidades, aleat(1, N_HABILIDADES))) {
-      printf("Erro ao inserir habilidade na missão\n");
+  int flag;
+  for (int i = 1; i < num_Hab; i++) {
+    flag = cjto_insere(missao->habilidades, aleat(0, num_Hab));
+    if (flag < 0) {
+      printf("Erro ao inserir habilidade na missão %d\n", i);
       cjto_destroi(missao->habilidades);  // Libera memória em caso de falha
       return -1;
     }
   }
-
   missao->n_perigo = aleat(0, 100);
   return 1;
 }
@@ -440,11 +471,20 @@ int inicializar_missoes(struct s_mundo *mundo, int *id) {
 }
 
 void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
-    int tempo_atual = 0;  // Inicia o tempo da simulação
+    struct s_evento *evento_atual = malloc(sizeof(struct s_evento));
+    if (evento_atual == NULL) {
+        printf("Erro ao alocar memória para evento_atual!\n");
+        return;
+    }
 
-    while (!fprio_vazia(lef)) {
-        struct s_evento *evento_atual = fprio_remove(lef);
-        tempo_atual = evento_atual->tempo;  // Atualiza o tempo atual
+    while (fprio_tamanho(lef) != 0) {
+        printf("Prox evento\n");
+        evento_atual = fprio_retira(lef, &evento_atual->tipo_evento, &evento_atual->tempo);
+
+        if (evento_atual == NULL) {
+            printf("Erro: Não há mais eventos para processar\n");
+            return;
+        }
 
         // Processa o evento com base no tipo
         switch (evento_atual->tipo_evento) {
@@ -454,8 +494,11 @@ void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
             case E_ESPERA:
                 espera(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
                 break;
+            case E_ENTRA:
+                entra(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                break;
             case E_DESISTE:
-                desiste(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                desiste(mundo, evento_atual->tempo, evento_atual->heroi_id, lef);
                 break;
             case E_AVISA:
                 avisa(mundo, evento_atual->tempo, evento_atual->base_id, lef);
@@ -471,6 +514,7 @@ void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
                 break;
             case E_FIM:
                 fim(mundo);  // Encerra a simulação e apresenta estatísticas
+                free(evento_atual);
                 return;
             default:
                 printf("Evento desconhecido: %d\n", evento_atual->tipo_evento);
@@ -479,30 +523,26 @@ void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
         // Libera a memória do evento processado
         free(evento_atual);
     }
-
 }
 
 // programa principal
 int main ()
 {
-int *ultimo_id_herois = 0;
-int *ultimo_id_bases = 0;
-int *ultimo_id_missoes = 0;
+int ultimo_id_herois = 0;
+int ultimo_id_bases = 0;
+int ultimo_id_missoes = 0;
 
 struct s_mundo *mundo = inicializa_mundo();
 struct fprio_t *lef = fprio_cria();
 
 srand(time(NULL));
 
-inicializar_herois(mundo, ultimo_id_herois, lef);
-inicializar_bases(mundo, *ultimo_id_bases);
-inicializar_missoes(mundo, ultimo_id_missoes);
-
-for (int i = 0; i < N_HEROIS; i++){
-  mundo->herois->base;
-}
-
-struct fprio_t *lef = fprio_cria();
+inicializar_herois(mundo, &ultimo_id_herois, lef);
+printf("Passou inicializações Herois\n");
+inicializar_bases(mundo, &ultimo_id_bases);
+printf("Passou inicializações Bases\n");
+inicializar_missoes(mundo, &ultimo_id_missoes);
+printf("Passou inicializações Missoes\n");
 
 // executar o laço de simulação
 executar_simulacao(mundo, lef);
