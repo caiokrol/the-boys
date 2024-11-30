@@ -93,7 +93,7 @@ struct s_evento {
     int heroi_id;     // Identificador do herói
     int base_id;      // Identificador da base (se necessário)
     int tipo_evento;  // Tipo do evento (CHEGA, SAI, etc.)
-    int missao_id;
+    //int missao_id;
     // Adicione outros campos conforme necessário para o evento
 };
 
@@ -124,7 +124,7 @@ int chega(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
     struct s_base *b = &mundo->bases[base];
     struct s_heroi *h = &mundo->herois[heroi];
     h->base = base;
-
+    printf("Base: %d\n", base);
   if((cjto_card(b->presentes) < b->lotacao) && (lista_tamanho(b->espera) == 0)){
     CRIAR_EVENTO(mundo, lef, E_ESPERA, tempo, heroi, base);
     return E_ESPERA;
@@ -141,41 +141,33 @@ int chega(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
 
 int espera(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
     struct s_base *b = &mundo->bases[base];
-    
     // Adiciona o herói ao fim da fila de espera da base
     lista_insere(b->espera, heroi, -1);
-
     // Cria e insere o evento AVISA na LEF
-    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, -1, base);  // heroi_id não é necessário para AVISA
+    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, heroi, base);  // heroi_id não é necessário para AVISA
     return E_AVISA;
 }
 
 int desiste(struct s_mundo *mundo, int tempo, int heroi, struct fprio_t *lef) {
     (void)mundo; //Suprime o erro do compilador de que o parametro não está sendo utilizado
     // Escolhe uma base destino aleatória
-    int nova_base = aleat(0, N_BASES);  // Considerando que mundo->num_bases é o número total de bases
+    int nova_base = aleat(0, N_BASES - 1);  // Considerando que mundo->num_bases é o número total de bases
 
     // Cria e insere o evento VIAJA na LEF
     CRIAR_EVENTO(mundo, lef, E_VIAJA, tempo, heroi, nova_base);
     return E_VIAJA;
 }
 
-int avisa(struct s_mundo *mundo, int tempo, int base, struct fprio_t *lef) {
+void avisa(struct s_mundo *mundo, int tempo, int base, struct fprio_t *lef){
     struct s_base *b = &mundo->bases[base];
-
-    // Enquanto houver vaga na base e heróis esperando na fila
-    while ((cjto_card(b->presentes) < b->lotacao) && (lista_tamanho(b->espera) > 0)) {
-        // Retira o primeiro herói da fila de espera
-        int heroi_id;
-        lista_consulta(b->espera, &heroi_id, 0);  // Assume função para remover do início da lista
-        lista_retira(b->espera, &heroi_id, 0);
-        // Adiciona o herói ao conjunto de heróis presentes na base
-        cjto_insere(b->presentes, heroi_id);
-
-        // Cria e insere o evento ENTRA na LEF
-        CRIAR_EVENTO(mundo, lef, E_ENTRA, tempo, heroi_id, base);
+    int heroi_na_vez;
+    while (cjto_card(b->presentes) < b->lotacao && lista_tamanho(b->espera))
+    {
+        lista_retira(b->espera, &heroi_na_vez, 0);
+        cjto_insere(b->presentes, heroi_na_vez);
+        printf("%6d: AVISA  PORTEIRO BASE %d ADMITE %2d\n", tempo, base, heroi_na_vez);
+        CRIAR_EVENTO(mundo, lef, E_ENTRA, tempo, heroi_na_vez, base);
     }
-    return E_ENTRA;
 }
 
 int entra(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *lef) {
@@ -204,7 +196,7 @@ int sai(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t *l
     CRIAR_EVENTO(mundo, lef, E_VIAJA, tempo, heroi, destino);
 
     // Cria e insere o evento AVISA para notificar o porteiro sobre a vaga liberada
-    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, -1, base);
+    CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, heroi, base);
 
     return E_VIAJA;
 }
@@ -372,7 +364,7 @@ int inicializa_heroi(struct s_heroi *heroi, int *id) {
   heroi->id = *id;
   heroi->experiencia = 0;
   heroi->paciencia = aleat(0, 100);
-  heroi->velocidade = aleat(50, 50000);
+  heroi->velocidade = aleat(50, 5000);
   heroi->status = VIVO;
 
   heroi->habilidades = cjto_cria(N_HABILIDADES);
@@ -397,7 +389,7 @@ int inicializar_herois(struct s_mundo *mundo, int *id, struct fprio_t *lef) {
     if (inicializa_heroi(&(mundo->herois[i]), id) == -1) {
       return -1;
     }
-    int base_aleatoria = aleat(0, N_BASES);       // Base aleatória entre 0 e (N_BASES - 1)
+    int base_aleatoria = aleat(0, N_BASES - 1);       // Base aleatória entre 0 e (N_BASES - 1)
     int tempo = aleat(0, 4320);       // Tempo aleatório entre 0 e 4320 minutos
 
         // Cria e insere o evento CHEGA na LEF
@@ -476,55 +468,128 @@ void executar_simulacao(struct s_mundo *mundo, struct fprio_t *lef) {
         printf("Erro ao alocar memória para evento_atual!\n");
         return;
     }
-
-    while (fprio_tamanho(lef) != 0) {
-        printf("Prox evento\n");
+      bool flag = true;
+    while (flag) {
+        //printf("lef:\n");
+        //fprio_imprime(lef);
+        //printf("\n\n\n");
         evento_atual = fprio_retira(lef, &evento_atual->tipo_evento, &evento_atual->tempo);
+
+        /*printf("Evento Atual:\n");
+        printf("tempo: %d\n", evento_atual->tempo);
+        printf("ID Heroi: %d\n", evento_atual->heroi_id);
+        printf("ID Base: %d\n", evento_atual->base_id);
+        printf("Tipo evento: %d\n", evento_atual->tipo_evento);
+        //printf("ID Missao: %d\n", evento_atual->missao_id);*/
 
         if (evento_atual == NULL) {
             printf("Erro: Não há mais eventos para processar\n");
             return;
         }
-
+        //printf("Passou do fprio_retira\n");
         // Processa o evento com base no tipo
         switch (evento_atual->tipo_evento) {
             case E_CHEGA:
+                //printf("Entrou no E_CHEGA\n");
                 chega(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                //printf("Saiu do E_CHEGA\n");
                 break;
             case E_ESPERA:
+                //printf("Entrou no E_ESPERA\n");
                 espera(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+                //printf("Saiu do E_ESPERA\n");
                 break;
             case E_ENTRA:
+                //printf("Entrou no E_ENTRA\n");
                 entra(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+               // printf("Saiu do E_ENTRA\n");
                 break;
             case E_DESISTE:
+                //printf("Entrou no E_DESISTE\n");
                 desiste(mundo, evento_atual->tempo, evento_atual->heroi_id, lef);
+                //printf("Saiu do E_DESISTE\n");
                 break;
             case E_AVISA:
+               // printf("Entrou no E_AVISA\n");
                 avisa(mundo, evento_atual->tempo, evento_atual->base_id, lef);
+               // printf("Saiu do E_AVISA\n");
                 break;
             case E_MISSAO:
-                missao(mundo, evento_atual->tempo, evento_atual->missao_id, lef); // Adapte se missao_id existir
+                //printf("Entrou no E_MISSAO\n");
+                missao(mundo, evento_atual->tempo, evento_atual->heroi_id, lef); // Adapte se missao_id existir
+               // printf("Saiu do E_MISSAO\n");
+                break;
+            case E_SAI:
+               // printf("Entrou no E_SAI\n");
+                sai(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+               // printf("Saiu do E_SAI\n");
                 break;
             case E_MORRE:
+               // printf("Entrou no E_MORRE\n");
                 morre(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+               // printf("Saiu do E_MORRE\n");
                 break;
             case E_VIAJA:
+               // printf("Entrou no E_VIAJA\n");
                 viaja(mundo, evento_atual->tempo, evento_atual->heroi_id, evento_atual->base_id, lef);
+               // printf("Saiu do E_VIAJA\n");
                 break;
             case E_FIM:
+               // printf("Entrou no E_FIM\n");
                 fim(mundo);  // Encerra a simulação e apresenta estatísticas
+                //printf("Saiu do E_FIM\n");
                 free(evento_atual);
+                flag = false;
                 return;
             default:
                 printf("Evento desconhecido: %d\n", evento_atual->tipo_evento);
         }
 
         // Libera a memória do evento processado
-        free(evento_atual);
     }
 }
 
+
+void imprimirDetMissoes(struct s_mundo *mundo){
+  for(int i = 0; i<N_MISSOES; i++){
+printf("Missao: %d, id: %d\n", i, mundo->missoes[i].id);
+printf("habilidades necessarias: ");
+cjto_imprime((mundo->missoes[i].habilidades));
+printf("\n");
+printf("Nivel de perigo: %d\n", mundo->missoes[i].n_perigo);
+printf("Coordenadas: x: %d, y: %d\n",mundo->missoes[i].local.x, mundo->missoes[i].local.y);
+printf("Status: %d\n", mundo->missoes[i].status);
+printf("\n");
+}
+}
+void imprimirDetHerois(struct s_mundo *mundo){
+for(int i=0; i < N_HEROIS; i++){
+  printf("Heroi: %d, id: %d\n", i, mundo->herois[i].id);
+  printf("habilidades: ");
+  cjto_imprime((mundo->herois[i].habilidades));
+  printf("\n");
+  printf("Paciencia: %d\n", mundo->herois[i].paciencia);
+  printf("Velocidade: %d\n", mundo->herois[i].velocidade);
+  printf("Experiencia: %d\n", mundo->herois[i].experiencia);
+  printf("Base: %d\n", mundo->herois[i].base);
+  printf("Status: %d\n", mundo->herois[i].status);
+  printf("\n");
+}
+}
+void imprimirDetBases(struct s_mundo *mundo){
+for(int i = 0; i <N_BASES; i++){
+  printf("Base: %d, id: %d\n", i, mundo->bases[i].id);
+  printf("Lotacao: %d\n", mundo->bases[i].lotacao);
+  printf("Presentes: ");
+  cjto_imprime(mundo->bases[i].presentes);
+  printf("\n");
+  printf("Espera: ");
+  lista_imprime(mundo->bases[i].espera);
+  printf("\n");
+  printf("Coordenadas: x: %d, y: %d\n",mundo->bases[i].local.x, mundo->bases[i].local.y);
+  printf("\n");
+}
+}
 // programa principal
 int main ()
 {
@@ -537,18 +602,29 @@ struct fprio_t *lef = fprio_cria();
 
 srand(time(NULL));
 
-inicializar_herois(mundo, &ultimo_id_herois, lef);
-printf("Passou inicializações Herois\n");
+
 inicializar_bases(mundo, &ultimo_id_bases);
 printf("Passou inicializações Bases\n");
+inicializar_herois(mundo, &ultimo_id_herois, lef);
+printf("Passou inicializações Herois\n");
 inicializar_missoes(mundo, &ultimo_id_missoes);
 printf("Passou inicializações Missoes\n");
 
+
+imprimirDetMissoes(mundo);
+imprimirDetHerois(mundo);
+imprimirDetBases(mundo);
+struct s_evento *evento_fim_do_mundo = cria_evento((T_FIM_DO_MUNDO), (E_FIM), 0, 0); \
+        if (evento_fim_do_mundo) { \
+            fprio_insere((lef), evento_fim_do_mundo, evento_fim_do_mundo->tipo_evento, evento_fim_do_mundo->tempo); \
+        }
+
+printf("Tempo evento: %d\n Tipo evento: %d\n", evento_fim_do_mundo->tempo, evento_fim_do_mundo->tipo_evento);
 // executar o laço de simulação
 executar_simulacao(mundo, lef);
 
   // destruir o mundo
-fim(mundo);
+//fim(mundo);
 
   return (0) ;
 }
