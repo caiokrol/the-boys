@@ -229,6 +229,8 @@ int morre(struct s_mundo *mundo, int tempo, int heroi, int base, struct fprio_t 
     // Marca o herói como morto
     mundo->herois[heroi].status = MORTO;  // Assume que existe um campo 'status' e uma constante MORTO
     // Cria e insere o evento AVISA na LEF para notificar o porteiro
+
+    printf("%6d: MORRE  HEROI %2d MISSAO IMPLEMENTAR MISSAO DE MORTE\n", tempo, heroi);
     CRIAR_EVENTO(mundo, lef, E_AVISA, tempo, (-1), base);
 
     return E_AVISA;
@@ -240,10 +242,16 @@ struct cjto_t *uniao_habilidades(struct s_mundo *mundo, struct s_base *b) {
     // Cria um conjunto vazio para armazenar a união
     struct cjto_t *uniao = cjto_cria(N_HEROIS); // Aloca com capacidade inicial suficiente
     if (!uniao) return NULL;
-
+    /*printf("Presentes:\n");
+    cjto_imprime(b->presentes);
+    printf("\n");*/
     // Itera sobre todos os heróis para verificar os presentes
     for (int i = 0; i < N_HEROIS; i++) {
-        if (cjto_pertence(b->presentes, i)) {
+          /*printf("Base: %d\n", b->id);
+          printf("I: %d\n", i);*/
+        if (cjto_pertence(b->presentes, i) == 1){
+
+          /*printf("ENtrou aqui no União habilidades\n");*/
             // Realiza a união do conjunto de habilidades do herói com o acumulado
             struct cjto_t *temp = cjto_uniao(uniao, mundo->herois[i].habilidades);
             if (!temp) {
@@ -261,12 +269,6 @@ struct cjto_t *uniao_habilidades(struct s_mundo *mundo, struct s_base *b) {
 }
 
 bool base_esta_apta(struct s_mundo *mundo, struct s_base *b, struct s_missao *m){
-  //printf("Habilidades necessarias: ");
-  //cjto_imprime(m->habilidades);
-  //printf("\n");
-  //printf("Uniao habilidades: ");
-  //cjto_imprime(uniao_habilidades(mundo, b));
-  //printf("\n");
   if(cjto_contem((uniao_habilidades(mundo, b)), m->habilidades)){
     return true;
   }
@@ -276,7 +278,7 @@ bool base_esta_apta(struct s_mundo *mundo, struct s_base *b, struct s_missao *m)
 
 int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef) {
     struct s_base *bmp = NULL;
-    float menor_distancia = INFINITY;
+    int menor_distancia = (N_TAMANHO_MUNDO * N_TAMANHO_MUNDO) + 1; 
     mundo->missoes[missao_id].tentativas = mundo->missoes[missao_id].tentativas + 1;
     printf("%6d: MISSAO %d TENT %d HAB REQ: [ ", tempo, missao_id, mundo->missoes[missao_id].tentativas);
     cjto_imprime(mundo->missoes[missao_id].habilidades);
@@ -285,11 +287,11 @@ int missao(struct s_mundo *mundo, int tempo, int missao_id, struct fprio_t *lef)
     for (int i = 0; i < mundo->NBases; i++) {
         struct s_base *b = &mundo->bases[i];
         if (base_esta_apta(mundo, b, &mundo->missoes[missao_id])) { // Supondo função base_esta_apta() já implementada 
-            float distancia = calcula_distancia(b->local.x, b->local.y, mundo->missoes[missao_id].local.x, mundo->missoes[missao_id].local.y);
+            int distancia = calcula_distancia(mundo->bases[i].local.x, mundo->bases[i].local.y, mundo->missoes[missao_id].local.x, mundo->missoes[missao_id].local.y);
             if (distancia < menor_distancia) {
                 menor_distancia = distancia;
                 bmp = b;
-                //printf("BMP id: %d\n", bmp->id);
+                printf("BMP id: %d\n", bmp->id);
             }
         }
     }
