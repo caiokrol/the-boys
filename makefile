@@ -2,7 +2,7 @@
 # Carlos Maziero - DINF/UFPR, 2024/2
 
 CC      = gcc
-CFLAGS  = -Wall -Wextra -g -std=c99
+CFLAGS  = -Wall -Wextra -g -std=c99 -Werror
 LDLIBS  = -lm
 MAIN    = theboys
 ENTREGA = $(MAIN)
@@ -12,7 +12,7 @@ HDR = lista.h fprio.h conjunto.h
 
 # lista de arquivos-objeto (a completar)
 # não inclua conjunto.o, senão ele será removido com "make clean"
-OBJ = lista.o fprio.o theboys.o
+OBJ = lista.o fprio.o theboys.o 
 
 # construir o executável
 $(MAIN): $(MAIN).o $(OBJ) conjunto.o
